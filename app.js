@@ -7,7 +7,7 @@ const MAX_POINTS = 512;
 const SAMPLE_INTERVAL = 0.02;
 const MAX_LOG_ITEMS = 200;
 const MESSAGE_WINDOW_MS = 60_000;
-const DEFAULT_STATUS_DETAIL = 'Awaiting broker login (visit login.html)';
+const DEFAULT_STATUS_DETAIL = 'Awaiting broker login (visit index.html)';
 const AUTH_STORAGE_KEY = 'ecg-mqtt-auth';
 
 let timeCursor = 0;
@@ -100,7 +100,7 @@ function autoConnectFromStoredCredentials() {
   const stored = getStoredAuth();
   if (!stored) {
     if (logoutBtn) logoutBtn.disabled = true;
-    setStatus('disconnected', 'Broker login required. Visit login.html');
+    setStatus('disconnected', 'Broker login required. Visit index.html');
     logSystem('No stored MQTT credentials found. Authenticate via the login page.');
     return;
   }
@@ -328,7 +328,7 @@ function handleDisconnect(detail) {
 function handleLogout() {
   clearStoredAuth();
   handleDisconnect('Signed out');
-  setStatus('disconnected', 'Signed out. Visit login.html to reconnect.');
+  setStatus('disconnected', 'Signed out. Visit index.html to reconnect.');
   logSystem('Signed out. Stored credentials cleared.');
 }
 
@@ -666,4 +666,3 @@ function exportCsv() {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
-

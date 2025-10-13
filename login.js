@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
       event.stopPropagation();
       bypassClicks = 0;
       bypassTimer = null;
-      window.location.href = 'index.html';
+      window.location.href = 'main.html';
     }
   });
 
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         remember,
         topic: 'ecg/live',
       });
-      window.location.href = 'index.html';
+      window.location.href = 'main.html';
     } catch (err) {
       if (errorEl) {
         errorEl.textContent = 'Unable to store credentials. Please check browser storage settings.';
