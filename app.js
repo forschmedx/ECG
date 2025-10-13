@@ -7,7 +7,8 @@ const MAX_POINTS = 512;
 const SAMPLE_INTERVAL = 0.02;
 const MAX_LOG_ITEMS = 200;
 const MESSAGE_WINDOW_MS = 60_000;
-const DEFAULT_STATUS_DETAIL = 'Awaiting broker configuration';
+const DEFAULT_STATUS_DETAIL = 'Awaiting broker login (visit login.html)';
+const AUTH_STORAGE_KEY = 'ecg-mqtt-auth';
 
 let timeCursor = 0;
 let ecgChart;
@@ -15,7 +16,8 @@ let chartDataset;
 let mqttClient = null;
 let isConnected = false;
 let isConnecting = false;
-let currentTopic = '';
+let currentTopic = 'ecg/live';
+let pendingAuthMeta = null;
 
 const messageTimestamps = [];
 
@@ -26,8 +28,6 @@ const buffers = {
 
 const metricElements = {
   heartRate: document.getElementById('metricHeartRate'),
-  bloodPressure: document.getElementById('metricBloodPressure'),
-  temperature: document.getElementById('metricTemperature'),
   prInterval: document.getElementById('metricPrInterval'),
   qtInterval: document.getElementById('metricQtInterval'),
   qrsDuration: document.getElementById('metricQrsDuration'),
@@ -44,32 +44,30 @@ const logListEl = document.getElementById('logList');
 const autoScrollCheckbox = document.getElementById('autoScroll');
 const clearLogBtn = document.getElementById('clearLog');
 
-const mqttForm = document.getElementById('mqttForm');
-const connectBtn = document.getElementById('connectBtn');
-const disconnectBtn = document.getElementById('disconnectBtn');
-const subscribeBtn = document.getElementById('subscribeBtn');
-const topicInput = document.getElementById('topic');
+const brokerInput = null;
+const clientIdInput = null;
+const usernameInput = null;
+const passwordInput = null;
+const rememberInput = null;
+const logoutBtn = document.getElementById('logoutBtn');
 
 const themeToggleBtn = document.getElementById('themeToggle');
 const exportBtn = document.getElementById('exportCsv');
 
-const publishForm = document.getElementById('publishForm');
-const publishTopicInput = document.getElementById('publishTopic');
-const publishPayloadInput = document.getElementById('publishPayload');
-const publishQosInput = document.getElementById('publishQos');
-const publishRetainInput = document.getElementById('publishRetain');
-const publishSendBtn = document.getElementById('publishSend');
+const publishForm = null;
+const publishTopicInput = null;
+const publishPayloadInput = null;
+const publishQosInput = null;
+const publishRetainInput = null;
+const publishSendBtn = null;
 
-currentTopic = topicInput?.value?.trim() || '';
+currentTopic = 'ecg/live';
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initChart();
-  seedDemoData();
   wireEvents();
-  setActiveTopic(currentTopic);
-  setPublishEnabled(false);
-  setStatus('disconnected', DEFAULT_STATUS_DETAIL);
+  autoConnectFromStoredCredentials();
 });
 
 function initTheme() {
@@ -90,22 +88,75 @@ function wireEvents() {
     refreshChartColors();
   });
 
-  mqttForm?.addEventListener('submit', handleConnect);
-  disconnectBtn?.addEventListener('click', handleDisconnect);
   exportBtn?.addEventListener('click', exportCsv);
-  subscribeBtn?.addEventListener('click', () => {
-    subscribeToTopic(topicInput?.value);
-  });
-  topicInput?.addEventListener('change', () => {
-    const trimmed = topicInput.value.trim();
-    currentTopic = trimmed;
-    setActiveTopic(trimmed);
-  });
   clearLogBtn?.addEventListener('click', () => {
     clearLogEntries();
     logSystem('Log cleared');
   });
-  publishForm?.addEventListener('submit', handlePublish);
+  logoutBtn?.addEventListener('click', handleLogout);
+}
+
+function autoConnectFromStoredCredentials() {
+  const stored = getStoredAuth();
+  if (!stored) {
+    if (logoutBtn) logoutBtn.disabled = true;
+    setStatus('disconnected', 'Broker login required. Visit login.html');
+    logSystem('No stored MQTT credentials found. Authenticate via the login page.');
+    return;
+  }
+  connectWithCredentials(stored);
+}
+
+function connectWithCredentials(auth) {
+  if (isConnecting || isConnected) return;
+  if (!auth?.url || !auth?.username || !auth?.password) {
+    setStatus('error', 'Incomplete credentials. Please login again.');
+    logSystem('Missing broker credentials. Re-authenticate via login page.');
+    return;
+  }
+
+  currentTopic = auth.topic || currentTopic || 'ecg/live';
+  setActiveTopic(currentTopic);
+  setStatus('connecting', `Connecting to ${auth.url}`);
+  setPublishEnabled(false);
+  isConnecting = true;
+  isConnected = false;
+  logoutBtn?.setAttribute('disabled', 'disabled');
+
+  if (typeof mqtt === 'undefined') {
+    setStatus('error', 'MQTT library not loaded');
+    logSystem('MQTT client library is unavailable. Check network access or CDN restrictions.');
+    isConnecting = false;
+    return;
+  }
+
+  pendingAuthMeta = {
+    url: auth.url,
+    clientId: auth.clientId || '',
+    username: auth.username,
+    password: auth.password,
+    remember: !!auth.remember,
+    topic: currentTopic,
+  };
+
+  try {
+    mqttClient = mqtt.connect(auth.url, {
+      clientId: auth.clientId || `ecg-web-${Math.random().toString(16).slice(2, 10)}`,
+      keepalive: 60,
+      username: auth.username,
+      password: auth.password,
+      clean: !auth.remember,
+      reconnectPeriod: 0,
+      connectTimeout: 10_000,
+    });
+  } catch (err) {
+    console.error('Failed to create MQTT client', err);
+    setStatus('error', err?.message || 'Failed to initiate connection');
+    logSystem(`Connection error: ${err?.message || 'Unknown error'}`);
+    isConnecting = false;
+    pendingAuthMeta = null;
+    return;
+  }
 }
 
 function updateThemeToggleLabel(theme) {
@@ -210,28 +261,6 @@ function refreshChartColors() {
   ecgChart.update('none');
 }
 
-function seedDemoData() {
-  buffers.labels.length = 0;
-  buffers.values.length = 0;
-  timeCursor = 0;
-  for (let i = 0; i < 180; i++) {
-    const voltage = mockEcgWaveform(i);
-    appendSample(voltage, i * SAMPLE_INTERVAL);
-  }
-  ecgChart?.update('none');
-}
-
-function mockEcgWaveform(index) {
-  const phase = (index % 90) / 90;
-  if (phase < 0.12) return 0.15 * Math.sin(phase * Math.PI * 3);
-  if (phase < 0.2) return 0.05;
-  if (phase < 0.28) return (phase - 0.2) * 7;
-  if (phase < 0.32) return 1.2 - (phase - 0.28) * 12;
-  if (phase < 0.36) return -1 + (phase - 0.32) * 8;
-  if (phase < 0.45) return -0.2 + (phase - 0.36) * 1.5;
-  return 0.02 * Math.sin(phase * Math.PI * 12);
-}
-
 function appendSample(voltage, explicitTime) {
   if (typeof explicitTime === 'number') {
     timeCursor = explicitTime;
@@ -263,67 +292,22 @@ function updateSampleCount() {
 }
 
 function handleConnect(event) {
-  event.preventDefault();
-  if (isConnecting || isConnected) return;
-  if (!mqttForm) return;
-
-  const formData = new FormData(mqttForm);
-  const url = formData.get('brokerUrl');
-  const topic = (formData.get('topic') || '').trim();
-  const clientId = (formData.get('clientId') || '').trim();
-  const keepAlive = Number(formData.get('keepAlive'));
-  const username = (formData.get('username') || '').trim();
-  const password = formData.get('password') || undefined;
-  const cleanSession = formData.get('cleanSession') === 'on';
-
-  if (!url) {
-    setStatus('error', 'Broker URL is required');
-    logSystem('Broker URL is required');
-    return;
-  }
-
-  currentTopic = topic;
-  setActiveTopic(currentTopic);
-
-  setStatus('connecting', `Connecting to ${url}`);
-  setConnectionInputsDisabled(true);
-  setPublishEnabled(false);
-  if (connectBtn) connectBtn.disabled = true;
-  if (disconnectBtn) disconnectBtn.disabled = true;
-  isConnecting = true;
-  isConnected = false;
-
-  if (typeof mqtt === 'undefined') {
-    setStatus('error', 'MQTT library not loaded');
-    logSystem('MQTT client library is unavailable. Check network access or CDN restrictions.');
-    setConnectionInputsDisabled(false);
-    setPublishEnabled(false);
-    if (connectBtn) connectBtn.disabled = false;
-    isConnecting = false;
-    return;
-  }
-
-  try {
-    mqttClient = mqtt.connect(url, {
-      clientId: clientId || `ecg-web-${Math.random().toString(16).slice(2, 10)}`,
-      keepalive: Number.isFinite(keepAlive) && keepAlive > 0 ? keepAlive : undefined,
-      username: username || undefined,
-      password: password || undefined,
-      clean: cleanSession,
-      reconnectPeriod: 0,
-      connectTimeout: 10_000,
-    });
-  } catch (err) {
-    console.error('Failed to create MQTT client', err);
-    setStatus('error', err?.message || 'Failed to initiate connection');
-    logSystem(`Connection error: ${err?.message || 'Unknown error'}`);
-    setConnectionInputsDisabled(false);
-    if (connectBtn) connectBtn.disabled = false;
-    isConnecting = false;
-    return;
-  }
-
-  attachClientListeners(url);
+  event?.preventDefault?.();
+  const form = event?.currentTarget;
+  if (!form) return;
+  const formData = new FormData(form);
+  const auth = {
+    url: (formData.get('authBroker') || formData.get('brokerUrl') || '').toString().trim(),
+    username: (formData.get('authUsername') || formData.get('username') || '').toString().trim(),
+    password: (formData.get('authPassword') || formData.get('password') || '').toString(),
+    clientId: (formData.get('authClientId') || formData.get('clientId') || '').toString().trim(),
+    remember:
+      formData.get('authRemember') === 'on' ||
+      formData.get('remember-me') === 'on' ||
+      formData.get('remember') === 'on',
+    topic: currentTopic,
+  };
+  connectWithCredentials(auth);
 }
 
 function handleDisconnect(detail) {
@@ -338,20 +322,34 @@ function handleDisconnect(detail) {
   }
   mqttClient = null;
   resetAfterDisconnect(detail || 'Disconnected');
+  pendingAuthMeta = null;
 }
 
-function attachClientListeners(url) {
+function handleLogout() {
+  clearStoredAuth();
+  handleDisconnect('Signed out');
+  setStatus('disconnected', 'Signed out. Visit login.html to reconnect.');
+  logSystem('Signed out. Stored credentials cleared.');
+}
+
+
+
+function attachClientListeners(url, authMeta) {
   if (!mqttClient) return;
 
   mqttClient.on('connect', () => {
     isConnecting = false;
     isConnected = true;
     setStatus('connected', `Connected to ${url}`);
-    logSystem(`Connected to ${url}`);
-    if (connectBtn) connectBtn.disabled = true;
-    if (disconnectBtn) disconnectBtn.disabled = false;
-    setConnectionInputsDisabled(false);
+    logSystem(`Authenticated with ${url}`);
+    setConnectionInputsDisabled(true);
     setPublishEnabled(true);
+    if (authMeta?.remember) {
+      persistAuth(authMeta);
+    } else {
+      clearStoredAuth();
+    }
+    pendingAuthMeta = null;
     subscribeToTopic(currentTopic, { silent: false });
   });
 
@@ -362,11 +360,11 @@ function attachClientListeners(url) {
       const parsed = JSON.parse(payloadText);
       processPayload(parsed);
     } catch (err) {
-      console.error('Failed to parse MQTT payload', err);
-      logSystem('Received malformed JSON payload');
       const singleValue = Number(payloadText);
       if (!Number.isNaN(singleValue)) {
         processPayload({ voltage: singleValue });
+      } else {
+        logSystem('Received malformed payload');
       }
     }
   });
@@ -385,8 +383,6 @@ function attachClientListeners(url) {
     isConnected = false;
     setPublishEnabled(false);
     setConnectionInputsDisabled(false);
-    if (connectBtn) connectBtn.disabled = false;
-    if (disconnectBtn) disconnectBtn.disabled = true;
     resetMessageStats();
     if (wasConnected) {
       setStatus('disconnected', 'Connection closed');
@@ -403,8 +399,6 @@ function resetAfterDisconnect(detail) {
   isConnecting = false;
   setPublishEnabled(false);
   setConnectionInputsDisabled(false);
-  if (connectBtn) connectBtn.disabled = false;
-  if (disconnectBtn) disconnectBtn.disabled = true;
   setStatus('disconnected', detail || DEFAULT_STATUS_DETAIL);
   logSystem(detail || 'Disconnected');
   resetMessageStats();
@@ -428,24 +422,56 @@ function setStatus(state, detail) {
   }
 }
 
-function setConnectionInputsDisabled(disabled) {
-  if (!mqttForm) return;
-  const elements = mqttForm.querySelectorAll('input, select, button');
-  elements.forEach((element) => {
-    if (element === disconnectBtn || element === subscribeBtn || element.id === 'topic') {
-      return;
-    }
-    if (element.type === 'submit') {
-      element.disabled = disabled;
-    } else {
-      element.disabled = disabled;
-    }
-  });
-}
+function setConnectionInputsDisabled() {}
 
 function setPublishEnabled(enabled) {
-  if (publishSendBtn) {
-    publishSendBtn.disabled = !enabled;
+  if (logoutBtn) {
+    logoutBtn.disabled = !enabled;
+  }
+}
+
+function persistAuth(meta) {
+  if (!meta?.remember) return;
+  try {
+    const payload = {
+      broker: meta.url,
+      username: meta.username,
+      password: meta.password,
+      clientId: meta.clientId,
+      topic: meta.topic || currentTopic,
+      remember: true,
+    };
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.error('Failed to persist MQTT credentials', err);
+  }
+}
+
+function clearStoredAuth() {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to clear stored MQTT credentials', err);
+  }
+}
+
+function getStoredAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data?.broker || !data?.username || !data?.password) return null;
+    return {
+      url: data.broker,
+      username: data.username,
+      password: data.password,
+      clientId: data.clientId || '',
+      topic: data.topic || currentTopic,
+      remember: !!data.remember,
+    };
+  } catch (err) {
+    console.error('Failed to read stored MQTT credentials', err);
+    return null;
   }
 }
 
@@ -455,9 +481,6 @@ function subscribeToTopic(topic, options = {}) {
   const previousTopic = currentTopic;
   currentTopic = trimmed;
   setActiveTopic(trimmed);
-  if (topicInput && topicInput.value !== trimmed) {
-    topicInput.value = trimmed;
-  }
 
   if (!mqttClient || !mqttClient.connected) {
     if (!options.silent) {
@@ -484,31 +507,12 @@ function subscribeToTopic(topic, options = {}) {
 }
 
 function handlePublish(event) {
-  event.preventDefault();
-  if (!mqttClient || !mqttClient.connected) {
-    logSystem('Cannot publish while disconnected');
-    return;
-  }
-  const topic = publishTopicInput?.value.trim();
-  if (!topic) {
-    logSystem('Publish topic is required');
-    return;
-  }
-  const payload = publishPayloadInput?.value ?? '';
-  const qos = Math.min(Math.max(parseInt(publishQosInput?.value, 10) || 0, 0), 2);
-  const retain = !!publishRetainInput?.checked;
-  mqttClient.publish(topic, payload, { qos, retain }, (err) => {
-    if (err) {
-      logSystem(`Failed to publish to ${topic}: ${err.message}`);
-    } else {
-      logSystem(`Published to ${topic} (QoS ${qos}${retain ? ', retain' : ''})`);
-    }
-  });
+  event?.preventDefault?.();
 }
 
 function setActiveTopic(topic) {
   if (activeTopicEl) {
-    activeTopicEl.textContent = topic || 'None';
+    activeTopicEl.textContent = topic || 'ecg/live';
   }
 }
 
@@ -526,22 +530,12 @@ function recordIncomingMessage(topic, payloadText) {
   while (messageTimestamps.length && messageTimestamps[0] < cutoff) {
     messageTimestamps.shift();
   }
-  if (messageRateEl) {
-    messageRateEl.textContent = `${messageTimestamps.length} msg/min`;
-  }
-  if (lastMessageEl) {
-    lastMessageEl.textContent = now.toLocaleTimeString();
-  }
+  updateMessageStats();
 }
 
-function resetMessageStats() {
-  messageTimestamps.length = 0;
-  if (messageRateEl) {
-    messageRateEl.textContent = '0 msg/min';
-  }
-  if (lastMessageEl) {
-    lastMessageEl.textContent = 'No data yet';
-  }
+function updateMessageStats() {
+  if (!messageRateEl) return;
+  messageRateEl.textContent = `${messageTimestamps.length} msg/min`;
 }
 
 function truncatePayload(text) {
@@ -619,14 +613,6 @@ function processPayload(data) {
     metricElements.heartRate.textContent = `${Math.round(data.heartRate)} bpm`;
   }
 
-  if (data.bloodPressure) {
-    metricElements.bloodPressure.textContent = String(data.bloodPressure);
-  }
-
-  if (typeof data.temperature === 'number') {
-    metricElements.temperature.textContent = `${Number(data.temperature).toFixed(1)} \u00B0C`;
-  }
-
   if (typeof data.prInterval === 'number') {
     metricElements.prInterval.textContent = `${Math.round(data.prInterval)} ms`;
   }
@@ -680,3 +666,4 @@ function exportCsv() {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+

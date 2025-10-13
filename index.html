@@ -20,48 +20,129 @@
       <header class="topbar glass-panel">
         <div class="brand">
           <div class="brand-icon" aria-hidden="true">
-            <svg viewBox="0 0 64 64" role="img" focusable="false">
-              <rect x="6" y="11" width="52" height="36" rx="8" ry="8" fill="none" stroke="currentColor" stroke-width="4"></rect>
-              <polyline points="10 33 18 33 23 23 29 41 35 19 40 33 54 33" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
-              <rect x="20" y="50" width="24" height="4" rx="2" fill="currentColor"></rect>
-            </svg>
+            <img src="logo.png" alt="" />
           </div>
           <div>
             <h1 class="brand-title">Electrocardiogram Console</h1>
             <p class="brand-subtitle">Monitor live ECG telemetry and patient vitals</p>
           </div>
         </div>
-        <div class="topbar-actions">
-          <button id="clearLog" type="button" class="ghost-btn small-btn">Clear Log</button>
-          <button id="themeToggle" type="button" class="toggle-btn" aria-label="Toggle color theme">
-            <span class="toggle-icon" aria-hidden="true"></span>
-            <span class="toggle-text">Dark</span>
-          </button>
-          <button id="exportCsv" type="button" class="primary-btn">Export CSV</button>
+        <div class="topbar-right">
+          <div class="topbar-actions">
+            <button id="clearLog" type="button" class="ghost-btn small-btn">Clear Log</button>
+            <button id="themeToggle" type="button" class="toggle-btn" aria-label="Toggle color theme">
+              <span class="toggle-icon" aria-hidden="true"></span>
+              <span class="toggle-text">Dark</span>
+            </button>
+            <button id="exportCsv" type="button" class="primary-btn">Export CSV</button>
+            <a href="login.html" class="ghost-btn small-btn">Broker Login</a>
+            <button id="logoutBtn" type="button" class="ghost-btn small-btn" disabled>Logout</button>
+          </div>
+          <div class="partner-badge" aria-label="Prodiagnox Healthcare">
+            <div class="partner-icon" aria-hidden="true">
+              <svg viewBox="0 0 128 128" role="img" focusable="false">
+                <defs>
+                  <linearGradient id="prodiagnoxGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#04c4d9" />
+                    <stop offset="100%" stop-color="#0087a5" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M67 16h18c13.8 0 25 11.2 25 25v14c0 13.8-11.2 25-25 25H67a7 7 0 010-14h18a11 11 0 0011-11V41a11 11 0 00-11-11H67a7 7 0 010-14zM61 112H43c-13.8 0-25-11.2-25-25V73c0-13.8 11.2-25 25-25h18a7 7 0 010 14H43a11 11 0 00-11 11v14a11 11 0 0011 11h18a7 7 0 010 14zM43 16h18a7 7 0 010 14H43a11 11 0 00-11 11v14a11 11 0 0011 11h18a7 7 0 010 14H43c-13.8 0-25-11.2-25-25V41c0-13.8 11.2-25 25-25zM85 112H67a7 7 0 010-14h18a11 11 0 0011-11V73a11 11 0 00-11-11H67a7 7 0 010-14h18c13.8 0 25 11.2 25 25v14c0 13.8-11.2 25-25 25z"
+                  fill="url(#prodiagnoxGradient)"
+                  fill-rule="evenodd"
+                ></path>
+              </svg>
+            </div>
+            <span class="partner-name">Prodiagnox Healthcare</span>
+          </div>
         </div>
       </header>
 
       <section class="status-strip">
         <article class="status-card glass-panel">
-          <div class="status-indicator">
-            <span id="statusDot" class="status-dot"></span>
+          <div class="status-card-heading">
+            <span class="status-card-icon status-card-icon--status" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path
+                  d="M12 3v6m5.2 2a5.2 5.2 0 1 1-10.4 0 8.5 8.5 0 0 1 2.6-6.2"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </span>
             <div>
               <p class="status-label">Status</p>
               <p id="connectionStatus" class="status-value">Disconnected</p>
             </div>
           </div>
+          <div class="status-card-body status-indicator">
+            <span id="statusDot" class="status-dot"></span>
+            <span class="status-hint">Live broker connection</span>
+          </div>
         </article>
         <article class="status-card glass-panel">
-          <p class="status-label">Connection Detail</p>
-          <p id="statusDetail" class="status-value">Awaiting broker configuration</p>
+          <div class="status-card-heading">
+            <span class="status-card-icon status-card-icon--detail" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path
+                  d="M3 8l9-5 9 5-9 5-9-5v8l9 5 9-5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </span>
+            <div>
+              <p class="status-label">Connection Detail</p>
+              <p id="statusDetail" class="status-value">Awaiting broker login (visit login.html)</p>
+            </div>
+          </div>
         </article>
         <article class="status-card glass-panel">
-          <p class="status-label">Last Message</p>
-          <p id="lastMessage" class="status-value">No data yet</p>
+          <div class="status-card-heading">
+            <span class="status-card-icon status-card-icon--message" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path
+                  d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-3l-4.5 4v-4H7a3 3 0 0 1-3-3z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </span>
+            <div>
+              <p class="status-label">Last Message</p>
+              <p id="lastMessage" class="status-value">No data yet</p>
+            </div>
+          </div>
         </article>
         <article class="status-card glass-panel">
-          <p class="status-label">Throughput</p>
-          <p id="messageRate" class="status-value">0 msg/min</p>
+          <div class="status-card-heading">
+            <span class="status-card-icon status-card-icon--throughput" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path
+                  d="M12 4a8 8 0 1 0 8 8m-8-4v4l2.5 2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </span>
+            <div>
+              <p class="status-label">Throughput</p>
+              <p id="messageRate" class="status-value">0 msg/min</p>
+            </div>
+          </div>
         </article>
       </section>
 
@@ -73,9 +154,12 @@
                 <path d="M6 28h6l4-10 8 20 6-14 4 4h8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
               </svg>
             </div>
-            <div>
+            <div class="hero-copy">
               <p class="hero-subtitle">Real-time telemetry</p>
               <h2 class="hero-title">Live Patient Overview</h2>
+              <p class="hero-description">
+                Connect to your MQTT broker to begin ingesting ECG samples, track vitals at a glance, and export raw readings for deeper analysis.
+              </p>
             </div>
             <div class="hero-summary">
               <p class="hero-stat-label">Active Topic</p>
@@ -92,34 +176,8 @@
               </div>
               <div class="metric-content">
                 <p class="metric-label">Heart Rate</p>
-                <p class="metric-value" id="metricHeartRate">74 bpm</p>
+                <p class="metric-value" id="metricHeartRate">-- bpm</p>
                 <p class="metric-caption">Instantaneous</p>
-              </div>
-            </article>
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <path d="M16 3s-7 8-7 13a7 7 0 1 0 14 0c0-5-7-13-7-13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M16 16a3 3 0 1 0 0.01 0" fill="none" stroke="currentColor" stroke-width="2"></path>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">Blood Pressure</p>
-                <p class="metric-value" id="metricBloodPressure">120/80 mmHg</p>
-                <p class="metric-caption">Last reading</p>
-              </div>
-            </article>
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <path d="M20 6a4 4 0 1 0-8 0v12a5 5 0 1 0 8 0z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <line x1="16" y1="11" x2="16" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">Body Temperature</p>
-                <p class="metric-value" id="metricTemperature">36.7 &deg;C</p>
-                <p class="metric-caption">Last 2 hours</p>
               </div>
             </article>
             <article class="metric-card glass-panel">
@@ -130,7 +188,7 @@
               </div>
               <div class="metric-content">
                 <p class="metric-label">PR Interval</p>
-                <p class="metric-value" id="metricPrInterval">158 ms</p>
+                <p class="metric-value" id="metricPrInterval">-- ms</p>
                 <p class="metric-caption">Current</p>
               </div>
             </article>
@@ -143,7 +201,7 @@
               </div>
               <div class="metric-content">
                 <p class="metric-label">QT Interval</p>
-                <p class="metric-value" id="metricQtInterval">393 ms</p>
+                <p class="metric-value" id="metricQtInterval">-- ms</p>
                 <p class="metric-caption">Current</p>
               </div>
             </article>
@@ -157,7 +215,7 @@
               </div>
               <div class="metric-content">
                 <p class="metric-label">QRS Duration</p>
-                <p class="metric-value" id="metricQrsDuration">111 ms</p>
+                <p class="metric-value" id="metricQrsDuration">-- ms</p>
                 <p class="metric-caption">Current</p>
               </div>
             </article>
@@ -193,122 +251,6 @@
             </div>
           </section>
         </main>
-
-        <aside class="sidebar">
-          <section class="glass-panel mqtt-panel">
-            <header class="panel-header">
-              <div class="panel-title">Broker Connection</div>
-            </header>
-            <form id="mqttForm" class="form-grid" autocomplete="off">
-              <label class="field">
-                <span class="field-label">Broker URL</span>
-                <input
-                  id="brokerUrl"
-                  name="brokerUrl"
-                  type="url"
-                  required
-                  value="wss://broker.emqx.io:8084/mqtt"
-                  placeholder="wss://broker.emqx.io:8084/mqtt"
-                />
-              </label>
-              <div class="form-row">
-                <label class="field">
-                  <span class="field-label">Client ID</span>
-                  <input
-                    id="clientId"
-                    name="clientId"
-                    type="text"
-                    placeholder="auto-generated if empty"
-                  />
-                </label>
-                <label class="field">
-                  <span class="field-label">Keep Alive (s)</span>
-                  <input
-                    id="keepAlive"
-                    name="keepAlive"
-                    type="number"
-                    min="0"
-                    value="60"
-                  />
-                </label>
-              </div>
-              <div class="form-row">
-                <label class="field">
-                  <span class="field-label">Username</span>
-                  <input id="username" name="username" type="text" />
-                </label>
-                <label class="field">
-                  <span class="field-label">Password</span>
-                  <input id="password" name="password" type="password" />
-                </label>
-              </div>
-              <label class="checkbox-field">
-                <input id="cleanSession" name="cleanSession" type="checkbox" checked />
-                <span>Clean session</span>
-              </label>
-              <label class="field">
-                <span class="field-label">Subscription topic</span>
-                <div class="field-with-action">
-                  <input
-                    id="topic"
-                    name="topic"
-                    type="text"
-                    required
-                    value="ecg/live"
-                    placeholder="ecg/live"
-                  />
-                  <button id="subscribeBtn" type="button" class="ghost-btn small-btn">Update</button>
-                </div>
-              </label>
-              <div class="form-actions">
-                <button id="connectBtn" type="submit" class="primary-btn">Connect</button>
-                <button id="disconnectBtn" type="button" class="ghost-btn" disabled>Disconnect</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="glass-panel publish-panel">
-            <header class="panel-header">
-              <div class="panel-title">Publish Test Payload</div>
-            </header>
-            <form id="publishForm" class="form-grid" autocomplete="off">
-              <label class="field">
-                <span class="field-label">Topic</span>
-                <input
-                  id="publishTopic"
-                  name="publishTopic"
-                  type="text"
-                  value="ecg/live/control"
-                  placeholder="ecg/live/control"
-                />
-              </label>
-              <label class="field">
-                <span class="field-label">Payload</span>
-                <textarea
-                  id="publishPayload"
-                  name="publishPayload"
-                  rows="4"
-                  placeholder='{"command":"ping"}'
-                ></textarea>
-              </label>
-              <div class="form-row align-center">
-                <label class="field narrow">
-                  <span class="field-label">QoS</span>
-                  <select id="publishQos" name="publishQos">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                  </select>
-                </label>
-                <label class="checkbox-field inline">
-                  <input id="publishRetain" name="publishRetain" type="checkbox" />
-                  <span>Retain</span>
-                </label>
-                <button id="publishSend" type="submit" class="ghost-btn small-btn">Send</button>
-              </div>
-            </form>
-          </section>
-        </aside>
       </div>
     </div>
   </body>
