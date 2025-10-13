@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Electrocardiogram Console</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body class="theme-dark">
+    <div class="page">
+      <header class="topbar glass-panel">
+        <div class="brand">
+          <div class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" role="img" focusable="false">
+              <rect x="6" y="11" width="52" height="36" rx="8" ry="8" fill="none" stroke="currentColor" stroke-width="4"></rect>
+              <polyline points="10 33 18 33 23 23 29 41 35 19 40 33 54 33" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              <rect x="20" y="50" width="24" height="4" rx="2" fill="currentColor"></rect>
+            </svg>
+          </div>
+          <div>
+            <h1 class="brand-title">Electrocardiogram Console</h1>
+            <p class="brand-subtitle">Monitor live ECG telemetry and patient vitals</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button id="clearLog" type="button" class="ghost-btn small-btn">Clear Log</button>
+          <button id="themeToggle" type="button" class="toggle-btn" aria-label="Toggle color theme">
+            <span class="toggle-icon" aria-hidden="true"></span>
+            <span class="toggle-text">Dark</span>
+          </button>
+          <button id="exportCsv" type="button" class="primary-btn">Export CSV</button>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <article class="status-card glass-panel">
+          <div class="status-indicator">
+            <span id="statusDot" class="status-dot"></span>
+            <div>
+              <p class="status-label">Status</p>
+              <p id="connectionStatus" class="status-value">Disconnected</p>
+            </div>
+          </div>
+        </article>
+        <article class="status-card glass-panel">
+          <p class="status-label">Connection Detail</p>
+          <p id="statusDetail" class="status-value">Awaiting broker configuration</p>
+        </article>
+        <article class="status-card glass-panel">
+          <p class="status-label">Last Message</p>
+          <p id="lastMessage" class="status-value">No data yet</p>
+        </article>
+        <article class="status-card glass-panel">
+          <p class="status-label">Throughput</p>
+          <p id="messageRate" class="status-value">0 msg/min</p>
+        </article>
+      </section>
+
+      <div class="layout">
+        <main class="main-column">
+          <section class="hero-panel glass-panel">
+            <div class="hero-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48" role="img" focusable="false">
+                <path d="M6 28h6l4-10 8 20 6-14 4 4h8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="hero-subtitle">Real-time telemetry</p>
+              <h2 class="hero-title">Live Patient Overview</h2>
+            </div>
+            <div class="hero-summary">
+              <p class="hero-stat-label">Active Topic</p>
+              <p id="activeTopic" class="hero-stat-value">ecg/live</p>
+            </div>
+          </section>
+
+          <section class="metrics-grid" aria-label="Vital Metrics">
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <path d="M16 27s-9-5.6-9-12.4A5.6 5.6 0 0 1 12.6 9 5.8 5.8 0 0 1 16 11a5.8 5.8 0 0 1 3.4-2 5.6 5.6 0 0 1 5.6 5.6C25 21.4 16 27 16 27z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">Heart Rate</p>
+                <p class="metric-value" id="metricHeartRate">74 bpm</p>
+                <p class="metric-caption">Instantaneous</p>
+              </div>
+            </article>
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <path d="M16 3s-7 8-7 13a7 7 0 1 0 14 0c0-5-7-13-7-13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M16 16a3 3 0 1 0 0.01 0" fill="none" stroke="currentColor" stroke-width="2"></path>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">Blood Pressure</p>
+                <p class="metric-value" id="metricBloodPressure">120/80 mmHg</p>
+                <p class="metric-caption">Last reading</p>
+              </div>
+            </article>
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <path d="M20 6a4 4 0 1 0-8 0v12a5 5 0 1 0 8 0z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <line x1="16" y1="11" x2="16" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">Body Temperature</p>
+                <p class="metric-value" id="metricTemperature">36.7 &deg;C</p>
+                <p class="metric-caption">Last 2 hours</p>
+              </div>
+            </article>
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <polyline points="4 21 10 21 14 11 18 25 22 17 28 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">PR Interval</p>
+                <p class="metric-value" id="metricPrInterval">158 ms</p>
+                <p class="metric-caption">Current</p>
+              </div>
+            </article>
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <polyline points="4 20 12 12 18 20 24 14 28 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                  <line x1="12" y1="24" x2="20" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">QT Interval</p>
+                <p class="metric-value" id="metricQtInterval">393 ms</p>
+                <p class="metric-caption">Current</p>
+              </div>
+            </article>
+            <article class="metric-card glass-panel">
+              <div class="metric-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img" focusable="false">
+                  <circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                  <line x1="16" y1="16" x2="16" y2="9" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                  <line x1="16" y1="16" x2="21" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                </svg>
+              </div>
+              <div class="metric-content">
+                <p class="metric-label">QRS Duration</p>
+                <p class="metric-value" id="metricQrsDuration">111 ms</p>
+                <p class="metric-caption">Current</p>
+              </div>
+            </article>
+          </section>
+
+          <section class="chart-panel glass-panel">
+            <header class="panel-header">
+              <div class="panel-title">
+                <span class="status-pill live"></span>
+                Live Signal
+              </div>
+              <div class="panel-actions">
+                <span class="panel-meta" id="sampleCount">0 samples</span>
+              </div>
+            </header>
+            <div class="chart-container">
+              <canvas id="ecgChart" aria-label="Live ECG Chart" role="img"></canvas>
+            </div>
+          </section>
+
+          <section class="log-panel glass-panel">
+            <header class="panel-header">
+              <div class="panel-title">Message Log</div>
+              <label class="checkbox-inline">
+                <input id="autoScroll" type="checkbox" checked />
+                <span>Auto-scroll</span>
+              </label>
+            </header>
+            <div class="log-container">
+              <ul id="logList" class="log-list">
+                <li class="log-placeholder">No messages yet. Connect to the broker to begin streaming data.</li>
+              </ul>
+            </div>
+          </section>
+        </main>
+
+        <aside class="sidebar">
+          <section class="glass-panel mqtt-panel">
+            <header class="panel-header">
+              <div class="panel-title">Broker Connection</div>
+            </header>
+            <form id="mqttForm" class="form-grid" autocomplete="off">
+              <label class="field">
+                <span class="field-label">Broker URL</span>
+                <input
+                  id="brokerUrl"
+                  name="brokerUrl"
+                  type="url"
+                  required
+                  value="wss://broker.emqx.io:8084/mqtt"
+                  placeholder="wss://broker.emqx.io:8084/mqtt"
+                />
+              </label>
+              <div class="form-row">
+                <label class="field">
+                  <span class="field-label">Client ID</span>
+                  <input
+                    id="clientId"
+                    name="clientId"
+                    type="text"
+                    placeholder="auto-generated if empty"
+                  />
+                </label>
+                <label class="field">
+                  <span class="field-label">Keep Alive (s)</span>
+                  <input
+                    id="keepAlive"
+                    name="keepAlive"
+                    type="number"
+                    min="0"
+                    value="60"
+                  />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="field-label">Username</span>
+                  <input id="username" name="username" type="text" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Password</span>
+                  <input id="password" name="password" type="password" />
+                </label>
+              </div>
+              <label class="checkbox-field">
+                <input id="cleanSession" name="cleanSession" type="checkbox" checked />
+                <span>Clean session</span>
+              </label>
+              <label class="field">
+                <span class="field-label">Subscription topic</span>
+                <div class="field-with-action">
+                  <input
+                    id="topic"
+                    name="topic"
+                    type="text"
+                    required
+                    value="ecg/live"
+                    placeholder="ecg/live"
+                  />
+                  <button id="subscribeBtn" type="button" class="ghost-btn small-btn">Update</button>
+                </div>
+              </label>
+              <div class="form-actions">
+                <button id="connectBtn" type="submit" class="primary-btn">Connect</button>
+                <button id="disconnectBtn" type="button" class="ghost-btn" disabled>Disconnect</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="glass-panel publish-panel">
+            <header class="panel-header">
+              <div class="panel-title">Publish Test Payload</div>
+            </header>
+            <form id="publishForm" class="form-grid" autocomplete="off">
+              <label class="field">
+                <span class="field-label">Topic</span>
+                <input
+                  id="publishTopic"
+                  name="publishTopic"
+                  type="text"
+                  value="ecg/live/control"
+                  placeholder="ecg/live/control"
+                />
+              </label>
+              <label class="field">
+                <span class="field-label">Payload</span>
+                <textarea
+                  id="publishPayload"
+                  name="publishPayload"
+                  rows="4"
+                  placeholder='{"command":"ping"}'
+                ></textarea>
+              </label>
+              <div class="form-row align-center">
+                <label class="field narrow">
+                  <span class="field-label">QoS</span>
+                  <select id="publishQos" name="publishQos">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                  </select>
+                </label>
+                <label class="checkbox-field inline">
+                  <input id="publishRetain" name="publishRetain" type="checkbox" />
+                  <span>Retain</span>
+                </label>
+                <button id="publishSend" type="submit" class="ghost-btn small-btn">Send</button>
+              </div>
+            </form>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>
