@@ -1,257 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Electrocardiogram Console</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Prodiagnox Healthcare Login</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js" defer></script>
-    <script src="app.js" defer></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#008080',
+              'background-light': '#F7FAFC',
+              'background-dark': '#1A202C',
+              'text-light': '#2D3748',
+              'text-dark': '#E2E8F0',
+              'card-light': '#FFFFFF',
+              'card-dark': '#2D3748',
+              'border-light': '#E2E8F0',
+              'border-dark': '#4A5568',
+            },
+            fontFamily: {
+              display: ['Poppins', 'sans-serif'],
+            },
+            borderRadius: {
+              DEFAULT: '0.5rem',
+            },
+          },
+        },
+      };
+    </script>
+    <script src="login.js" defer></script>
   </head>
-  <body class="theme-dark">
-    <div class="page">
-      <header class="topbar glass-panel">
-        <div class="brand">
-          <div class="brand-icon" aria-hidden="true">
-            <img src="logo.png" alt="" />
-          </div>
-          <div>
-            <h1 class="brand-title">Electrocardiogram Console</h1>
-            <p class="brand-subtitle">Monitor live ECG telemetry and patient vitals</p>
-          </div>
-        </div>
-        <div class="topbar-right">
-          <div class="topbar-actions">
-            <button id="clearLog" type="button" class="ghost-btn small-btn">Clear Log</button>
-            <button id="themeToggle" type="button" class="toggle-btn" aria-label="Toggle color theme">
-              <span class="toggle-icon" aria-hidden="true"></span>
-              <span class="toggle-text">Dark</span>
-            </button>
-            <button id="exportCsv" type="button" class="primary-btn">Export CSV</button>
-            <a href="login.html" class="ghost-btn small-btn">Broker Login</a>
-            <button id="logoutBtn" type="button" class="ghost-btn small-btn" disabled>Logout</button>
-          </div>
-          <div class="partner-badge" aria-label="Prodiagnox Healthcare">
-            <div class="partner-icon" aria-hidden="true">
-              <svg viewBox="0 0 128 128" role="img" focusable="false">
-                <defs>
-                  <linearGradient id="prodiagnoxGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#04c4d9" />
-                    <stop offset="100%" stop-color="#0087a5" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M67 16h18c13.8 0 25 11.2 25 25v14c0 13.8-11.2 25-25 25H67a7 7 0 010-14h18a11 11 0 0011-11V41a11 11 0 00-11-11H67a7 7 0 010-14zM61 112H43c-13.8 0-25-11.2-25-25V73c0-13.8 11.2-25 25-25h18a7 7 0 010 14H43a11 11 0 00-11 11v14a11 11 0 0011 11h18a7 7 0 010 14zM43 16h18a7 7 0 010 14H43a11 11 0 00-11 11v14a11 11 0 0011 11h18a7 7 0 010 14H43c-13.8 0-25-11.2-25-25V41c0-13.8 11.2-25 25-25zM85 112H67a7 7 0 010-14h18a11 11 0 0011-11V73a11 11 0 00-11-11H67a7 7 0 010-14h18c13.8 0 25 11.2 25 25v14c0 13.8-11.2 25-25 25z"
-                  fill="url(#prodiagnoxGradient)"
-                  fill-rule="evenodd"
-                ></path>
-              </svg>
-            </div>
-            <span class="partner-name">Prodiagnox Healthcare</span>
-          </div>
-        </div>
-      </header>
+  <body
+    class="font-display bg-background-light dark:bg-background-dark min-h-screen relative overflow-hidden transition-colors"
+  >
+    <div
+      class="pointer-events-none absolute -top-32 -right-28 h-80 w-80 rounded-full bg-primary/30 blur-3xl dark:bg-primary/20"
+      aria-hidden="true"
+    ></div>
+    <div
+      class="pointer-events-none absolute -bottom-24 -left-20 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl dark:bg-emerald-300/10"
+      aria-hidden="true"
+    ></div>
 
-      <section class="status-strip">
-        <article class="status-card glass-panel">
-          <div class="status-card-heading">
-            <span class="status-card-icon status-card-icon--status" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img" focusable="false">
-                <path
-                  d="M12 3v6m5.2 2a5.2 5.2 0 1 1-10.4 0 8.5 8.5 0 0 1 2.6-6.2"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </span>
+    <main class="relative z-10 w-full max-w-5xl mx-auto px-6 py-12">
+      <div class="max-w-xl mx-auto">
+        <section
+          class="relative rounded-3xl border border-border-light/70 dark:border-border-dark/40 bg-card-light/95 dark:bg-card-dark/95 shadow-2xl shadow-slate-900/35 p-8 sm:p-10 space-y-8"
+        >
+          <div class="flex flex-col items-center text-center space-y-3">
+            <div
+              class="h-20 w-20 rounded-3xl bg-teal-600/15 dark:bg-slate-900/60 shadow-xl shadow-teal-500/30 ring-1 ring-teal-500/40 flex items-center justify-center"
+            >
+              <img
+                src="logo.png"
+                alt="Prodiagnox ECG logo"
+                class="h-14 w-14 object-contain drop-shadow-[0_12px_24px_rgba(29,194,237,0.35)]"
+              />
+            </div>
             <div>
-              <p class="status-label">Status</p>
-              <p id="connectionStatus" class="status-value">Disconnected</p>
-            </div>
-          </div>
-          <div class="status-card-body status-indicator">
-            <span id="statusDot" class="status-dot"></span>
-            <span class="status-hint">Live broker connection</span>
-          </div>
-        </article>
-        <article class="status-card glass-panel">
-          <div class="status-card-heading">
-            <span class="status-card-icon status-card-icon--detail" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img" focusable="false">
-                <path
-                  d="M3 8l9-5 9 5-9 5-9-5v8l9 5 9-5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </span>
-            <div>
-              <p class="status-label">Connection Detail</p>
-              <p id="statusDetail" class="status-value">Awaiting broker login (visit login.html)</p>
-            </div>
-          </div>
-        </article>
-        <article class="status-card glass-panel">
-          <div class="status-card-heading">
-            <span class="status-card-icon status-card-icon--message" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img" focusable="false">
-                <path
-                  d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-3l-4.5 4v-4H7a3 3 0 0 1-3-3z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </span>
-            <div>
-              <p class="status-label">Last Message</p>
-              <p id="lastMessage" class="status-value">No data yet</p>
-            </div>
-          </div>
-        </article>
-        <article class="status-card glass-panel">
-          <div class="status-card-heading">
-            <span class="status-card-icon status-card-icon--throughput" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img" focusable="false">
-                <path
-                  d="M12 4a8 8 0 1 0 8 8m-8-4v4l2.5 2.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </span>
-            <div>
-              <p class="status-label">Throughput</p>
-              <p id="messageRate" class="status-value">0 msg/min</p>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <div class="layout">
-        <main class="main-column">
-          <section class="hero-panel glass-panel">
-            <div class="hero-icon" aria-hidden="true">
-              <svg viewBox="0 0 48 48" role="img" focusable="false">
-                <path d="M6 28h6l4-10 8 20 6-14 4 4h8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </div>
-            <div class="hero-copy">
-              <p class="hero-subtitle">Real-time telemetry</p>
-              <h2 class="hero-title">Live Patient Overview</h2>
-              <p class="hero-description">
-                Connect to your MQTT broker to begin ingesting ECG samples, track vitals at a glance, and export raw readings for deeper analysis.
+              <h1 class="text-2xl font-semibold text-text-light dark:text-text-dark">
+                Prodiagnox Healthcare
+              </h1>
+              <p class="text-sm text-slate-600 dark:text-slate-400">
+                Broker authentication required to continue
               </p>
             </div>
-            <div class="hero-summary">
-              <p class="hero-stat-label">Active Topic</p>
-              <p id="activeTopic" class="hero-stat-value">ecg/live</p>
-            </div>
-          </section>
+          </div>
 
-          <section class="metrics-grid" aria-label="Vital Metrics">
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <path d="M16 27s-9-5.6-9-12.4A5.6 5.6 0 0 1 12.6 9 5.8 5.8 0 0 1 16 11a5.8 5.8 0 0 1 3.4-2 5.6 5.6 0 0 1 5.6 5.6C25 21.4 16 27 16 27z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">Heart Rate</p>
-                <p class="metric-value" id="metricHeartRate">-- bpm</p>
-                <p class="metric-caption">Instantaneous</p>
-              </div>
-            </article>
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <polyline points="4 21 10 21 14 11 18 25 22 17 28 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">PR Interval</p>
-                <p class="metric-value" id="metricPrInterval">-- ms</p>
-                <p class="metric-caption">Current</p>
-              </div>
-            </article>
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <polyline points="4 20 12 12 18 20 24 14 28 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                  <line x1="12" y1="24" x2="20" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">QT Interval</p>
-                <p class="metric-value" id="metricQtInterval">-- ms</p>
-                <p class="metric-caption">Current</p>
-              </div>
-            </article>
-            <article class="metric-card glass-panel">
-              <div class="metric-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" role="img" focusable="false">
-                  <circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" stroke-width="2"></circle>
-                  <line x1="16" y1="16" x2="16" y2="9" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
-                  <line x1="16" y1="16" x2="21" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
-                </svg>
-              </div>
-              <div class="metric-content">
-                <p class="metric-label">QRS Duration</p>
-                <p class="metric-value" id="metricQrsDuration">-- ms</p>
-                <p class="metric-caption">Current</p>
-              </div>
-            </article>
-          </section>
-
-          <section class="chart-panel glass-panel">
-            <header class="panel-header">
-              <div class="panel-title">
-                <span class="status-pill live"></span>
-                Live Signal
-              </div>
-              <div class="panel-actions">
-                <span class="panel-meta" id="sampleCount">0 samples</span>
-              </div>
-            </header>
-            <div class="chart-container">
-              <canvas id="ecgChart" aria-label="Live ECG Chart" role="img"></canvas>
-            </div>
-          </section>
-
-          <section class="log-panel glass-panel">
-            <header class="panel-header">
-              <div class="panel-title">Message Log</div>
-              <label class="checkbox-inline">
-                <input id="autoScroll" type="checkbox" checked />
-                <span>Auto-scroll</span>
+          <form id="authForm" autocomplete="off" class="space-y-5">
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark" for="authBroker">
+                Broker URL
               </label>
-            </header>
-            <div class="log-container">
-              <ul id="logList" class="log-list">
-                <li class="log-placeholder">No messages yet. Connect to the broker to begin streaming data.</li>
-              </ul>
+              <input
+                id="authBroker"
+                name="authBroker"
+                type="url"
+                required
+                value="wss://broker.emqx.io:8084/mqtt"
+                class="block w-full rounded-xl border border-border-light dark:border-border-dark px-4 py-3 text-text-light dark:text-text-dark placeholder-slate-400 bg-white dark:bg-slate-800/80 focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none transition"
+                placeholder="wss://broker.example.com:8084/mqtt"
+              />
             </div>
-          </section>
-        </main>
+
+            <div class="space-y-2">
+              <label class="flex items-center gap-2 text-sm font-medium text-text-light dark:text-text-dark" for="authClientId">
+                Client ID
+                <span class="text-xs font-normal text-slate-500 dark:text-slate-300">optional</span>
+              </label>
+              <input
+                id="authClientId"
+                name="authClientId"
+                type="text"
+                class="block w-full rounded-xl border border-border-light dark:border-border-dark px-4 py-3 text-text-light dark:text-text-dark placeholder-slate-400 bg-white dark:bg-slate-800/80 focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none transition"
+                placeholder="auto-generated if empty"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark" for="authUsername">
+                Username
+              </label>
+              <input
+                id="authUsername"
+                name="authUsername"
+                type="text"
+                autocomplete="username"
+                required
+                class="block w-full rounded-xl border border-border-light dark:border-border-dark px-4 py-3 text-text-light dark:text-text-dark placeholder-slate-400 bg-white dark:bg-slate-800/80 focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none transition"
+                placeholder="clinic-operator"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-text-light dark:text-text-dark" for="authPassword">
+                Password
+              </label>
+              <input
+                id="authPassword"
+                name="authPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+                class="block w-full rounded-xl border border-border-light dark:border-border-dark px-4 py-3 text-text-light dark:text-text-dark placeholder-slate-400 bg-white dark:bg-slate-800/80 focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none transition"
+                placeholder="********"
+              />
+            </div>
+
+            <label class="flex items-center justify-between gap-3 text-sm text-text-light dark:text-text-dark rounded-xl border border-dashed border-border-light/80 dark:border-border-dark/60 bg-white/40 dark:bg-slate-800/40 px-4 py-3">
+              <div class="flex items-center gap-2">
+                <input
+                  id="authRemember"
+                  name="authRemember"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  checked
+                />
+                <span>Remember credentials on this device</span>
+              </div>
+              <span class="text-xs text-slate-500 dark:text-slate-400">Encrypted locally</span>
+            </label>
+
+            <p id="loginError" class="text-sm text-red-500 hidden"></p>
+
+            <button
+              type="submit"
+              class="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-base font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background-light dark:focus-visible:ring-offset-background-dark"
+            >
+              <span class="material-icons text-lg">login</span>
+              <span>Enter Console</span>
+            </button>
+          </form>
+
+          <div class="space-y-2 text-xs text-center text-slate-500 dark:text-slate-400">
+            <p>Credentials are stored locally when "Remember" is enabled. Clear browser storage to remove them.</p>
+            <p>
+              Having trouble? <a href="mailto:support@prodiagnox.health" class="font-medium text-primary hover:text-teal-700">Contact support</a>
+            </p>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   </body>
 </html>
