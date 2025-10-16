@@ -773,6 +773,19 @@ body.theme-light.mqtt-sidebar-open .brand {
   color: var(--accent);
 }
 
+.metric-value[data-channel='B'] {
+  color: #34d399;
+}
+
+.status-pill[data-channel='B'] {
+  background: #34d399;
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.7);
+}
+
+.panel-meta[data-sample-count='B'] {
+  color: #34d399;
+}
+
 .metric-caption {
   margin: 0;
   font-size: 0.84rem;
@@ -1246,4 +1259,3 @@ body.theme-light .mqtt-sidebar .checkbox-field {
     justify-content: center;
   }
 }
-

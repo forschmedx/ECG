@@ -1,4 +1,10 @@
 const AUTH_STORAGE_KEY = 'ecg-mqtt-auth';
+const DEFAULT_MQTT_SETTINGS = {
+  broker: 'wss://y8ef161e.ala.asia-southeast1.emqxsl.com:8084/mqtt',
+  username: 'PDX',
+  password: 'pdx',
+  topic: 'sensor/data',
+};
 
 function saveCredentials(payload) {
   try {
@@ -10,18 +16,47 @@ function saveCredentials(payload) {
 }
 
 function populateFromStorage(form) {
+  const brokerInput = form.querySelector('#authBroker');
+  const clientIdInput = form.querySelector('#authClientId');
+  const usernameInput = form.querySelector('#authUsername');
+  const passwordInput = form.querySelector('#authPassword');
+  const rememberInput = form.querySelector('#authRemember');
+
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (data?.broker) form.querySelector('#authBroker').value = data.broker;
-    if (data?.clientId) form.querySelector('#authClientId').value = data.clientId;
-    if (data?.username) form.querySelector('#authUsername').value = data.username;
-    if (data?.remember && form.querySelector('#authRemember')) {
-      form.querySelector('#authRemember').checked = true;
+    if (!raw) {
+      if (brokerInput && !brokerInput.value) {
+        brokerInput.value = DEFAULT_MQTT_SETTINGS.broker;
+      }
+      if (usernameInput && !usernameInput.value) {
+        usernameInput.value = DEFAULT_MQTT_SETTINGS.username;
+      }
+      if (passwordInput && !passwordInput.value) {
+        passwordInput.value = DEFAULT_MQTT_SETTINGS.password;
+      }
+      if (rememberInput) {
+        rememberInput.checked = true;
+      }
+      return;
     }
+
+    const data = JSON.parse(raw);
+    if (data?.broker && brokerInput) brokerInput.value = data.broker;
+    if (data?.clientId && clientIdInput) clientIdInput.value = data.clientId;
+    if (data?.username && usernameInput) usernameInput.value = data.username;
+    if (data?.password && passwordInput) passwordInput.value = data.password;
+    if (rememberInput) rememberInput.checked = !!data?.remember;
   } catch (err) {
     console.error('Failed to restore MQTT credentials', err);
+    if (brokerInput && !brokerInput.value) {
+      brokerInput.value = DEFAULT_MQTT_SETTINGS.broker;
+    }
+    if (usernameInput && !usernameInput.value) {
+      usernameInput.value = DEFAULT_MQTT_SETTINGS.username;
+    }
+    if (passwordInput && !passwordInput.value) {
+      passwordInput.value = DEFAULT_MQTT_SETTINGS.password;
+    }
   }
 }
 
@@ -89,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         password,
         clientId,
         remember,
-        topic: 'ecg/live',
+        topic: DEFAULT_MQTT_SETTINGS.topic,
       });
       window.location.href = 'main.html';
     } catch (err) {

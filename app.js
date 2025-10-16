@@ -3,42 +3,91 @@ const ICON_SUN =
 const ICON_MOON =
   '<svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
 
-const MAX_POINTS = 512;
+const VISIBLE_POINT_COUNT = 100;
+const CSV_RETENTION_COUNT = 1000;
 const SAMPLE_INTERVAL = 0.02;
 const MAX_LOG_ITEMS = 200;
 const MESSAGE_WINDOW_MS = 60_000;
 const DEFAULT_STATUS_DETAIL = 'Awaiting broker login (visit index.html)';
+const DEFAULT_TOPIC = 'sensor/data';
+const WEBSOCKET_TLS_PORT = '8084';
+const LEGACY_TLS_PORT = '8884';
 const AUTH_STORAGE_KEY = 'ecg-mqtt-auth';
+const DEFAULT_CHANNEL_ID = 'A';
+const CHANNEL_LINE_COLORS = {
+  A: '#1dc2ed',
+  B: '#34d399',
+};
+const CHANNEL_FILL_COLORS = {
+  A: 'rgba(29, 194, 237, 0.12)',
+  B: 'rgba(52, 211, 153, 0.15)',
+};
+const CHANNEL_DATA_KEYS = {
+  A: {
+    samples: [
+      'ecgA',
+      'ecg_a',
+      'ecg-a',
+      'leadA',
+      'lead_a',
+      'lead-a',
+      'signalA',
+      'signal_a',
+      'signal-a',
+      'valueA',
+      'value_a',
+      'value-a',
+      'samplesA',
+      'samples_a',
+      'samples-a',
+      'channelA',
+      'channel_a',
+      'channel-a',
+    ],
+    heartRate: ['hrA', 'hr_a', 'hr-a', 'heartRateA', 'heart_rate_a', 'heart-rate-a'],
+    rrInterval: ['rrA', 'rr_a', 'rr-a', 'rrIntervalA', 'rr_interval_a', 'rr-interval-a'],
+  },
+  B: {
+    samples: [
+      'ecgB',
+      'ecg_b',
+      'ecg-b',
+      'leadB',
+      'lead_b',
+      'lead-b',
+      'signalB',
+      'signal_b',
+      'signal-b',
+      'valueB',
+      'value_b',
+      'value-b',
+      'samplesB',
+      'samples_b',
+      'samples-b',
+      'channelB',
+      'channel_b',
+      'channel-b',
+    ],
+    heartRate: ['hrB', 'hr_b', 'hr-b', 'heartRateB', 'heart_rate_b', 'heart-rate-b'],
+    rrInterval: ['rrB', 'rr_b', 'rr-b', 'rrIntervalB', 'rr_interval_b', 'rr-interval-b'],
+  },
+};
 
-let timeCursor = 0;
-let ecgChart;
-let chartDataset;
 let mqttClient = null;
 let isConnected = false;
 let isConnecting = false;
-let currentTopic = 'ecg/live';
+let currentTopic = DEFAULT_TOPIC;
 let pendingAuthMeta = null;
 
 const messageTimestamps = [];
-
-const buffers = {
-  labels: [],
-  values: [],
-};
-
-const metricElements = {
-  heartRate: document.getElementById('metricHeartRate'),
-  prInterval: document.getElementById('metricPrInterval'),
-  qtInterval: document.getElementById('metricQtInterval'),
-  qrsDuration: document.getElementById('metricQrsDuration'),
-};
+const channelStates = new Map();
+let allCharts = [];
 
 const connectionStatusEl = document.getElementById('connectionStatus');
 const statusDot = document.getElementById('statusDot');
 const statusDetailEl = document.getElementById('statusDetail');
 const lastMessageEl = document.getElementById('lastMessage');
 const messageRateEl = document.getElementById('messageRate');
-const sampleCountEl = document.getElementById('sampleCount');
 const activeTopicEl = document.getElementById('activeTopic');
 const logListEl = document.getElementById('logList');
 const autoScrollCheckbox = document.getElementById('autoScroll');
@@ -61,10 +110,93 @@ const publishQosInput = null;
 const publishRetainInput = null;
 const publishSendBtn = null;
 
-currentTopic = 'ecg/live';
+currentTopic = DEFAULT_TOPIC;
+
+function createChannelState(id) {
+  return {
+    id,
+    timeCursor: 0,
+    labels: [],
+    values: [],
+    history: [],
+    canvases: [],
+    charts: [],
+    sampleCountEls: [],
+    metrics: new Map(),
+  };
+}
+
+function ensureChannelState(id = DEFAULT_CHANNEL_ID) {
+  const channelId = (id || DEFAULT_CHANNEL_ID).toString().toUpperCase();
+  if (!channelStates.has(channelId)) {
+    channelStates.set(channelId, createChannelState(channelId));
+  }
+  return channelStates.get(channelId);
+}
+
+function registerChannelElements() {
+  ['A', 'B'].forEach((id) => ensureChannelState(id));
+
+  channelStates.forEach((state) => {
+    state.canvases.length = 0;
+    state.sampleCountEls.length = 0;
+    state.charts.length = 0;
+    state.metrics.forEach((list) => list.length = 0);
+  });
+
+  document.querySelectorAll('[data-ecg-chart]').forEach((canvas) => {
+    const channelId = (canvas.dataset.ecgChart || DEFAULT_CHANNEL_ID).toUpperCase();
+    const state = ensureChannelState(channelId);
+    state.canvases.push(canvas);
+  });
+
+  document.querySelectorAll('[data-sample-count]').forEach((element) => {
+    const channelId = (element.dataset.sampleCount || DEFAULT_CHANNEL_ID).toUpperCase();
+    const state = ensureChannelState(channelId);
+    state.sampleCountEls.push(element);
+  });
+
+  document.querySelectorAll('[data-metric][data-channel]').forEach((element) => {
+    const metric = element.dataset.metric;
+    const channelId = (element.dataset.channel || DEFAULT_CHANNEL_ID).toUpperCase();
+    if (!metric) return;
+    const state = ensureChannelState(channelId);
+    if (!state.metrics.has(metric)) {
+      state.metrics.set(metric, []);
+    }
+    state.metrics.get(metric).push(element);
+  });
+}
+
+function getChannelColor(channelId) {
+  return CHANNEL_LINE_COLORS[channelId] || CHANNEL_LINE_COLORS[DEFAULT_CHANNEL_ID];
+}
+
+function getChannelFillColor(channelId) {
+  return CHANNEL_FILL_COLORS[channelId] || CHANNEL_FILL_COLORS[DEFAULT_CHANNEL_ID];
+}
+
+function normalizeBrokerUrl(rawUrl) {
+  const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'wss:' && parsed.port === LEGACY_TLS_PORT) {
+      parsed.port = WEBSOCKET_TLS_PORT;
+      return parsed.toString();
+    }
+    return parsed.toString();
+  } catch (err) {
+    if (trimmed.startsWith('wss://') && trimmed.includes(`:${LEGACY_TLS_PORT}/`)) {
+      return trimmed.replace(`:${LEGACY_TLS_PORT}/`, `:${WEBSOCKET_TLS_PORT}/`);
+    }
+    return trimmed;
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  registerChannelElements();
   initChart();
   wireEvents();
   autoConnectFromStoredCredentials();
@@ -115,9 +247,20 @@ function connectWithCredentials(auth) {
     return;
   }
 
-  currentTopic = auth.topic || currentTopic || 'ecg/live';
+  const brokerUrl = normalizeBrokerUrl(auth.url);
+  if (!brokerUrl) {
+    setStatus('error', 'Invalid broker URL.');
+    logSystem('Invalid broker URL provided.');
+    return;
+  }
+
+  if (brokerUrl !== auth.url) {
+    logSystem(`Adjusted broker URL to ${brokerUrl}`);
+  }
+
+  currentTopic = auth.topic || currentTopic || DEFAULT_TOPIC;
   setActiveTopic(currentTopic);
-  setStatus('connecting', `Connecting to ${auth.url}`);
+  setStatus('connecting', `Connecting to ${brokerUrl}`);
   setPublishEnabled(false);
   isConnecting = true;
   isConnected = false;
@@ -131,7 +274,7 @@ function connectWithCredentials(auth) {
   }
 
   pendingAuthMeta = {
-    url: auth.url,
+    url: brokerUrl,
     clientId: auth.clientId || '',
     username: auth.username,
     password: auth.password,
@@ -140,15 +283,18 @@ function connectWithCredentials(auth) {
   };
 
   try {
-    mqttClient = mqtt.connect(auth.url, {
+    mqttClient = mqtt.connect(brokerUrl, {
       clientId: auth.clientId || `ecg-web-${Math.random().toString(16).slice(2, 10)}`,
       keepalive: 60,
       username: auth.username,
       password: auth.password,
-      clean: !auth.remember,
+      clean: true,
       reconnectPeriod: 0,
       connectTimeout: 10_000,
     });
+    if (mqttClient) {
+      attachClientListeners(auth.url, pendingAuthMeta);
+    }
   } catch (err) {
     console.error('Failed to create MQTT client', err);
     setStatus('error', err?.message || 'Failed to initiate connection');
@@ -173,66 +319,71 @@ function updateThemeToggleLabel(theme) {
 }
 
 function initChart() {
-  const ctx = document.getElementById('ecgChart');
-  if (!ctx) return;
-  const { lineColor, gridColor, textColor } = resolveChartColors();
-  chartDataset = {
-    label: 'ECG (mV)',
-    data: [],
-    cubicInterpolationMode: 'monotone',
-    tension: 0.4,
-    borderColor: lineColor,
-    backgroundColor: 'rgba(29, 194, 237, 0.12)',
-    fill: true,
-    pointRadius: 0,
-  };
+  const { gridColor, textColor } = resolveChartColors();
+  allCharts = [];
 
-  ecgChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [chartDataset],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      scales: {
-        x: {
-          title: {
-            display: true,
-            text: 'Time (seconds)',
-            color: textColor,
+  channelStates.forEach((state) => {
+    state.charts = state.canvases.map((canvas) => {
+      const dataset = {
+        label: `Lead ${state.id}`,
+        data: [],
+        cubicInterpolationMode: 'monotone',
+        tension: 0.4,
+        borderColor: getChannelColor(state.id),
+        backgroundColor: getChannelFillColor(state.id),
+        fill: true,
+        pointRadius: 0,
+      };
+
+      const chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [dataset],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Time (seconds)',
+                color: textColor,
+              },
+              ticks: {
+                color: textColor,
+              },
+              grid: {
+                color: gridColor,
+              },
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Voltage',
+                color: textColor,
+              },
+              ticks: {
+                color: textColor,
+              },
+              grid: {
+                color: gridColor,
+              },
+            },
           },
-          ticks: {
-            color: textColor,
-          },
-          grid: {
-            color: gridColor,
+          plugins: {
+            legend: {
+              display: false,
+            },
           },
         },
-        y: {
-          title: {
-            display: true,
-            text: 'Voltage (mV)',
-            color: textColor,
-          },
-          min: -1.5,
-          max: 1.5,
-          ticks: {
-            color: textColor,
-          },
-          grid: {
-            color: gridColor,
-          },
-        },
-      },
-      plugins: {
-        legend: {
-          display: false,
-        },
-      },
-    },
+      });
+
+      allCharts.push(chart);
+      return chart;
+    });
   });
 }
 
@@ -240,55 +391,175 @@ function resolveChartColors() {
   const styles = getComputedStyle(document.body);
   const textColor = styles.getPropertyValue('--text-primary').trim() || '#ffffff';
   const gridBase = styles.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.15)';
-  const lineColor = '#1dc2ed';
   return {
     textColor,
-    lineColor,
     gridColor: gridBase,
   };
 }
 
 function refreshChartColors() {
-  if (!ecgChart) return;
-  const { textColor, gridColor, lineColor } = resolveChartColors();
-  ecgChart.options.scales.x.ticks.color = textColor;
-  ecgChart.options.scales.x.grid.color = gridColor;
-  ecgChart.options.scales.x.title.color = textColor;
-  ecgChart.options.scales.y.ticks.color = textColor;
-  ecgChart.options.scales.y.grid.color = gridColor;
-  ecgChart.options.scales.y.title.color = textColor;
-  chartDataset.borderColor = lineColor;
-  ecgChart.update('none');
+  if (!allCharts.length) return;
+  const { textColor, gridColor } = resolveChartColors();
+  channelStates.forEach((state) => {
+    state.charts.forEach((chart) => {
+      chart.options.scales.x.ticks.color = textColor;
+      chart.options.scales.x.grid.color = gridColor;
+      chart.options.scales.x.title.color = textColor;
+      chart.options.scales.y.ticks.color = textColor;
+      chart.options.scales.y.grid.color = gridColor;
+      chart.options.scales.y.title.color = textColor;
+      if (chart.data.datasets[0]) {
+        chart.data.datasets[0].borderColor = getChannelColor(state.id);
+        chart.data.datasets[0].backgroundColor = getChannelFillColor(state.id);
+      }
+      chart.update('none');
+    });
+  });
 }
 
-function appendSample(voltage, explicitTime) {
-  if (typeof explicitTime === 'number') {
-    timeCursor = explicitTime;
+function appendSample(channelId, voltage, explicitTime) {
+  if (!Number.isFinite(voltage)) return;
+  const state = ensureChannelState(channelId);
+
+  const hasExplicitTime = typeof explicitTime === 'number' && Number.isFinite(explicitTime);
+  const effectiveTime = hasExplicitTime ? explicitTime : state.timeCursor;
+
+  state.labels.push(effectiveTime.toFixed(2));
+  state.values.push(voltage);
+  state.history.push({
+    time: effectiveTime,
+    value: voltage,
+  });
+
+  if (state.labels.length > VISIBLE_POINT_COUNT) {
+    state.labels.shift();
+    state.values.shift();
   }
 
-  buffers.labels.push(timeCursor.toFixed(2));
-  buffers.values.push(voltage);
-
-  if (buffers.labels.length > MAX_POINTS) {
-    buffers.labels.shift();
-    buffers.values.shift();
+  if (state.history.length > CSV_RETENTION_COUNT) {
+    state.history.shift();
   }
 
-  timeCursor += SAMPLE_INTERVAL;
+  state.timeCursor = effectiveTime + SAMPLE_INTERVAL;
 
-  if (ecgChart) {
-    ecgChart.data.labels = buffers.labels;
-    chartDataset.data = buffers.values;
-    ecgChart.update('none');
-  }
+  state.charts.forEach((chart) => {
+    chart.data.labels = state.labels;
+    if (chart.data.datasets[0]) {
+      chart.data.datasets[0].data = state.values;
+    }
+    chart.update('none');
+  });
 
-  updateSampleCount();
+  updateSampleCount(state.id);
+  setMetricValue(state.id, 'latestSample', formatVoltage(voltage));
 }
 
-function updateSampleCount() {
-  if (sampleCountEl) {
-    sampleCountEl.textContent = `${buffers.labels.length} samples`;
+function updateSampleCount(channelId) {
+  const state = ensureChannelState(channelId);
+  const text = `${state.history.length} samples saved`;
+  state.sampleCountEls.forEach((el) => {
+    el.textContent = text;
+  });
+}
+
+function defaultMetricPlaceholder(metric) {
+  switch (metric) {
+    case 'heartRate':
+      return '-- bpm';
+    case 'rrInterval':
+      return '-- ms';
+    case 'latestSample':
+      return '--';
+    default:
+      return '--';
   }
+}
+
+function setMetricValue(channelId, metric, value) {
+  const state = ensureChannelState(channelId);
+  const targets = state.metrics.get(metric);
+  if (!targets || !targets.length) return;
+  const text = value == null || value === '' ? defaultMetricPlaceholder(metric) : value;
+  targets.forEach((element) => {
+    element.textContent = text;
+  });
+}
+
+function formatHeartRate(value) {
+  if (!Number.isFinite(value)) {
+    return defaultMetricPlaceholder('heartRate');
+  }
+  return `${Math.round(value)} bpm`;
+}
+
+function formatInterval(value) {
+  if (!Number.isFinite(value)) {
+    return defaultMetricPlaceholder('rrInterval');
+  }
+  return `${Math.round(value)} ms`;
+}
+
+function formatVoltage(value) {
+  if (!Number.isFinite(value)) {
+    return defaultMetricPlaceholder('latestSample');
+  }
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1000) {
+    return value.toFixed(0);
+  }
+  if (magnitude >= 10) {
+    return value.toFixed(1);
+  }
+  return value.toFixed(2);
+}
+
+function matchPayloadValue(payload, candidates) {
+  if (!payload || typeof payload !== 'object') return null;
+  const lookup = new Map();
+  Object.keys(payload).forEach((key) => {
+    lookup.set(key.toLowerCase(), key);
+  });
+  for (const candidate of candidates || []) {
+    const actualKey = lookup.get(candidate.toLowerCase());
+    if (actualKey && payload[actualKey] !== undefined && payload[actualKey] !== null) {
+      return {
+        key: actualKey,
+        value: payload[actualKey],
+      };
+    }
+  }
+  return null;
+}
+
+function applyChannelData(channelId, payload) {
+  const descriptor = CHANNEL_DATA_KEYS[channelId];
+  if (!descriptor) return { handled: false, samples: false };
+  let handled = false;
+  let samplesHandled = false;
+
+  const hrMatch = matchPayloadValue(payload, descriptor.heartRate);
+  if (hrMatch && typeof hrMatch.value === 'number') {
+    setMetricValue(channelId, 'heartRate', formatHeartRate(hrMatch.value));
+    handled = true;
+  }
+
+  const rrMatch = matchPayloadValue(payload, descriptor.rrInterval);
+  if (rrMatch && typeof rrMatch.value === 'number') {
+    setMetricValue(channelId, 'rrInterval', formatInterval(rrMatch.value));
+    handled = true;
+  }
+
+  const sampleMatch = matchPayloadValue(payload, descriptor.samples);
+  if (sampleMatch) {
+    const samples = coerceVoltageList(sampleMatch.value);
+    if (samples.length) {
+      samples.forEach((value) => appendSample(channelId, value));
+      handled = true;
+      samplesHandled = true;
+    }
+  }
+
+  return { handled, samples: samplesHandled };
 }
 
 function handleConnect(event) {
@@ -360,9 +631,11 @@ function attachClientListeners(url, authMeta) {
       const parsed = JSON.parse(payloadText);
       processPayload(parsed);
     } catch (err) {
-      const singleValue = Number(payloadText);
-      if (!Number.isNaN(singleValue)) {
-        processPayload({ voltage: singleValue });
+      const numericSeries = parseNumericSeries(payloadText);
+      if (numericSeries.length === 1) {
+        processPayload({ voltage: numericSeries[0] });
+      } else if (numericSeries.length > 1) {
+        processPayload({ voltage: numericSeries });
       } else {
         logSystem('Received malformed payload');
       }
@@ -371,6 +644,12 @@ function attachClientListeners(url, authMeta) {
 
   mqttClient.on('error', (err) => {
     console.error('MQTT error', err);
+    isConnecting = false;
+    if (isConnected) {
+      isConnected = false;
+      setPublishEnabled(false);
+    }
+    setConnectionInputsDisabled(false);
     setStatus('error', err?.message || 'MQTT error');
     logSystem(`Error: ${err?.message || 'Unknown MQTT error'}`);
   });
@@ -424,6 +703,33 @@ function setStatus(state, detail) {
 
 function setConnectionInputsDisabled() {}
 
+function resetMessageStats() {
+  messageTimestamps.length = 0;
+  if (messageRateEl) {
+    messageRateEl.textContent = '0 msg/min';
+  }
+  channelStates.forEach((state) => {
+    state.labels.length = 0;
+    state.values.length = 0;
+    state.history.length = 0;
+    state.timeCursor = 0;
+    state.charts.forEach((chart) => {
+      chart.data.labels = [];
+      if (chart.data.datasets[0]) {
+        chart.data.datasets[0].data = [];
+      }
+      chart.update('none');
+    });
+    updateSampleCount(state.id);
+    setMetricValue(state.id, 'heartRate', defaultMetricPlaceholder('heartRate'));
+    setMetricValue(state.id, 'rrInterval', defaultMetricPlaceholder('rrInterval'));
+    setMetricValue(state.id, 'latestSample', defaultMetricPlaceholder('latestSample'));
+  });
+  if (lastMessageEl) {
+    lastMessageEl.textContent = '--';
+  }
+}
+
 function setPublishEnabled(enabled) {
   if (logoutBtn) {
     logoutBtn.disabled = !enabled;
@@ -461,12 +767,22 @@ function getStoredAuth() {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data?.broker || !data?.username || !data?.password) return null;
+    const normalizedBroker = normalizeBrokerUrl(data.broker);
+    if (normalizedBroker !== data.broker) {
+      data.broker = normalizedBroker;
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+      } catch (err) {
+        console.error('Failed to update stored MQTT broker URL', err);
+      }
+      logSystem('Updated stored broker URL to WebSocket port 8084.');
+    }
     return {
-      url: data.broker,
+      url: normalizedBroker,
       username: data.username,
       password: data.password,
       clientId: data.clientId || '',
-      topic: data.topic || currentTopic,
+      topic: data.topic || DEFAULT_TOPIC,
       remember: !!data.remember,
     };
   } catch (err) {
@@ -512,7 +828,7 @@ function handlePublish(event) {
 
 function setActiveTopic(topic) {
   if (activeTopicEl) {
-    activeTopicEl.textContent = topic || 'ecg/live';
+    activeTopicEl.textContent = topic || DEFAULT_TOPIC;
   }
 }
 
@@ -606,55 +922,234 @@ function logSystem(message) {
   });
 }
 
+function parseNumericSeries(source) {
+  if (Array.isArray(source)) {
+    const flattened = [];
+    source.forEach((item) => {
+      const values = parseNumericSeries(item);
+      if (values.length) {
+        flattened.push(...values);
+      }
+    });
+    return flattened;
+  }
+
+  if (typeof source === 'number') {
+    return Number.isFinite(source) ? [source] : [];
+  }
+
+  if (typeof source === 'string') {
+    const trimmed = source.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed !== source) {
+        const parsedResult = parseNumericSeries(parsed);
+        if (parsedResult.length) {
+          return parsedResult;
+        }
+      }
+    } catch (err) {
+      // ignore JSON parse errors and fall back to delimiter parsing
+    }
+    const parts = trimmed.split(/[\s,;|]+/);
+    const values = [];
+    for (const part of parts) {
+      if (!part) continue;
+      const value = Number(part);
+      if (Number.isFinite(value)) {
+        values.push(value);
+      }
+    }
+    return values;
+  }
+
+  return [];
+}
+
 function processPayload(data) {
-  if (typeof data !== 'object' || data === null) return;
+  if (data == null) return;
+
+  if (typeof data === 'number') {
+    appendSample(DEFAULT_CHANNEL_ID, data);
+    return;
+  }
+
+  if (typeof data === 'string') {
+    const series = parseNumericSeries(data);
+    if (series.length) {
+      series.forEach((value) => appendSample(DEFAULT_CHANNEL_ID, value));
+    }
+    return;
+  }
+
+  if (Array.isArray(data)) {
+    const series = coerceVoltageList(data);
+    if (series.length) {
+      series.forEach((value) => appendSample(DEFAULT_CHANNEL_ID, value));
+    }
+    return;
+  }
+
+  if (typeof data !== 'object') return;
+
+  const leadA = applyChannelData('A', data);
+  const leadB = applyChannelData('B', data);
 
   if (typeof data.heartRate === 'number') {
-    metricElements.heartRate.textContent = `${Math.round(data.heartRate)} bpm`;
+    setMetricValue(DEFAULT_CHANNEL_ID, 'heartRate', formatHeartRate(data.heartRate));
   }
 
-  if (typeof data.prInterval === 'number') {
-    metricElements.prInterval.textContent = `${Math.round(data.prInterval)} ms`;
+  if (typeof data.rrInterval === 'number') {
+    setMetricValue(DEFAULT_CHANNEL_ID, 'rrInterval', formatInterval(data.rrInterval));
   }
 
-  if (typeof data.qtInterval === 'number') {
-    metricElements.qtInterval.textContent = `${Math.round(data.qtInterval)} ms`;
+  if (!leadA.samples && !leadB.samples) {
+    const sampleMatch = matchPayloadValue(data, ['voltage', 'value', 'latestSample', 'sample']);
+    if (sampleMatch && typeof sampleMatch.value === 'number') {
+      appendSample(DEFAULT_CHANNEL_ID, sampleMatch.value);
+      return;
+    }
   }
 
-  if (typeof data.qrsDuration === 'number') {
-    metricElements.qrsDuration.textContent = `${Math.round(data.qrsDuration)} ms`;
-  }
-
-  const voltage = coerceVoltageList(data);
-  if (voltage.length) {
-    for (let i = 0; i < voltage.length; i++) {
-      appendSample(Number(voltage[i]));
+  if (!leadA.samples && !leadB.samples) {
+    const extraSeries = coerceVoltageList(data);
+    if (extraSeries.length) {
+      let targetChannel = DEFAULT_CHANNEL_ID;
+      if (leadA.handled && !leadB.handled) {
+        targetChannel = 'A';
+      } else if (leadB.handled && !leadA.handled) {
+        targetChannel = 'B';
+      }
+      extraSeries.forEach((value) => appendSample(targetChannel, value));
     }
   }
 }
 
 function coerceVoltageList(payload) {
-  if (Array.isArray(payload.voltage)) {
-    return payload.voltage.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (payload == null) return [];
+
+  if (Array.isArray(payload)) {
+    const collected = [];
+    payload.forEach((entry) => {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const nested = coerceVoltageList(entry);
+        if (nested.length) {
+          collected.push(...nested);
+        }
+      } else {
+        const normalized = parseNumericSeries(entry);
+        if (normalized.length) {
+          collected.push(...normalized);
+        }
+      }
+    });
+    return collected;
   }
 
-  if (typeof payload.voltage === 'number') {
-    return [payload.voltage];
+  if (typeof payload === 'number' || typeof payload === 'string') {
+    return parseNumericSeries(payload);
   }
 
-  if (typeof payload.value === 'number') {
-    return [payload.value];
+  if (typeof payload !== 'object') {
+    return [];
+  }
+
+  const prioritizedKeys = [
+    'voltage',
+    'voltages',
+    'values',
+    'samples',
+    'data',
+    'signal',
+    'signals',
+    'waveform',
+    'waveforms',
+    'ecg',
+    'ecgValues',
+    'ecgData',
+    'points',
+    'series',
+  ];
+
+  for (const key of prioritizedKeys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      const normalized = parseNumericSeries(payload[key]);
+      if (normalized.length) {
+        return normalized;
+      }
+    }
+  }
+
+  const scalarKeys = [
+    'voltage',
+    'value',
+    'sample',
+    'reading',
+    'signal',
+    'ecg',
+    'ecgValue',
+    'amplitude',
+    'y',
+  ];
+
+  for (const key of scalarKeys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      const normalized = parseNumericSeries(payload[key]);
+      if (normalized.length === 1) {
+        return normalized;
+      }
+    }
+  }
+
+  const nestedKeys = ['payload', 'body', 'message', 'data'];
+  for (const key of nestedKeys) {
+    if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+    const value = payload[key];
+    if (value && typeof value === 'object') {
+      const nested = coerceVoltageList(value);
+      if (nested.length) {
+        return nested;
+      }
+    } else {
+      const normalized = parseNumericSeries(value);
+      if (normalized.length) {
+        return normalized;
+      }
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (Array.isArray(value) || typeof value === 'string') {
+      const normalized = parseNumericSeries(value);
+      if (normalized.length > 1) {
+        return normalized;
+      }
+    } else if (value && typeof value === 'object') {
+      const nested = coerceVoltageList(value);
+      if (nested.length) {
+        return nested;
+      }
+    }
   }
 
   return [];
 }
 
 function exportCsv() {
-  if (!buffers.labels.length) return;
-  const header = 'time_s,voltage_mv\n';
-  const body = buffers.labels
-    .map((label, index) => `${label},${buffers.values[index]?.toFixed(4) ?? ''}`)
-    .join('\n');
+  const rows = [];
+  channelStates.forEach((state) => {
+    state.history.forEach((entry) => {
+      const timeValue = Number.isFinite(entry.time) ? entry.time.toFixed(4) : '';
+      const voltage = Number.isFinite(entry.value) ? entry.value : '';
+      rows.push(`${timeValue},${voltage},${state.id}`);
+    });
+  });
+
+  if (!rows.length) return;
+
+  const header = 'time_s,voltage_raw,channel\n';
+  const body = rows.join('\n');
   const blob = new Blob([header + body], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
